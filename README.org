@@ -1,0 +1,607 @@
+#+TITLE: Static Builds Of Libclang 10
+#+AUTHOR: Aditya Siram
+#+OPTIONS: ^:nil ;; let an underscore be an underscore, disable sub-superscripting
+#+OPTIONS: timestamp:nil
+
+* Introduction
+This package consists of a set of [[https://cmake.org][CMake]] scripts that download and compile
+[[https://clang.llvm.org/docs/Tooling.html][libclang]] into a single large static archive which bundles all LLVM and third
+party dependencies so applications which link against it can be easily deployed.
+Currently it only works on Linux (tested on Ubuntu 19.04 and Manjaro) and macOS
+Mojave. Windows is the next big priority; I just haven't gotten to it yet.
+
+It does not build ~LLVM~ and ~libclang~ from scratch, that would take 5-7 hours,
+instead it reuses the [[https://releases.llvm.org/download.html][prebuilt LLVM]] static libraries provided by the project for
+each platform and only re-builds the ~libclang~ part. On my 6 year old i5
+Thinkpad with 16 GB RAM after the downloads completed the whole process
+took about 7 minutes.
+
+To convince you it works as advertised the package also ships with a little
+example app ~clang_visitor~ that traverses some C++ AST nodes and here are its
+runtime dependencies on Linux:
+#+BEGIN_EXAMPLE
+> $ ldd ./clang_visitor
+	linux-vdso.so.1 (0x00007ffce8bfb000)
+	libstdc++.so.6 => /usr/lib/libstdc++.so.6 (0x00007fdb9954a000)
+	libm.so.6 => /usr/lib/libm.so.6 (0x00007fdb99404000)
+	libdl.so.2 => /usr/lib/libdl.so.2 (0x00007fdb993ff000)
+	libpthread.so.0 => /usr/lib/libpthread.so.0 (0x00007fdb993dd000)
+	libgcc_s.so.1 => /usr/lib/libgcc_s.so.1 (0x00007fdb993c3000)
+	libc.so.6 => /usr/lib/libc.so.6 (0x00007fdb991fd000)
+	/lib64/ld-linux-x86-64.so.2 => /usr/lib64/ld-linux-x86-64.so.2 (0x00007fdb9ea9b000)
+#+END_EXAMPLE
+... and on macOS Mojave:
+#+BEGIN_EXAMPLE
+> otool -L clang_visitor
+clang_visitor:
+	/usr/lib/libz.1.dylib (compatibility version 1.0.0, current version 1.2.11)
+	/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 400.9.4)
+	/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1252.250.1)
+#+END_EXAMPLE
+* Motivation
+Currently the best way statically analyze C and C++ source is [[https://clang.llvm.org/docs/Tooling.html][libclang]].
+Unfortunately applications built against ~libclang~ aren't very portable or easy
+to deploy because of dependencies on third party libraries like [[https://invisible-island.net/ncurses/][ncurses]] and [[https://github.com/Z3Prover/z3][z3]].
+Package managers do a decent job of orchestrating the install but it's still
+hard to deploy an application that's pinned to a specific version of ~libclang~
+or to ship binaries between distributions. There's always containers or [[https://nixos.org/nix/][Nix]] or
+[[https://guix.gnu.org/][Guix]] but to my mind asking people to get up to speed on purely functional
+package managers or have [[https://www.docker.com/][Docker]] running just to use ~libclang~ apps is a
+non-starter. With this package all you need is [[https://cmake.org][CMake]] but only initially to build
+and install a static ~libclang~ archive; after that you can develop with simple
+Makefiles if you like and ship users turn-key fat binaries with minimal
+dependencies.
+* Getting Started
+First make sure you have a ~cmake~ version greater that 3.13:
+#+BEGIN_EXAMPLE
+> cmake --version
+cmake version 3.17.0
+
+CMake suite maintained and supported by Kitware (kitware.com/cmake).
+#+END_EXAMPLE
+
+Clone this repo, create a ~build~ directory inside it and run the build and install:
+#+BEGIN_EXAMPLE
+> git clone https://github.com/deech/libclang-static-build
+> cd libclang-static-build
+> mkdir build; cd build
+> cmake .. -DCMAKE_INSTALL_PREFIX=..
+# this downloads about 500MB of stuff into 'build' so depending on your network it might be a second or two ...
+> make install
+#+END_EXAMPLE
+
+The ~install~ step copies all the artifacts to the directory into which you
+cloned this repo just above the ~build~ directory. Nothing else on the system is
+touched.
+
+Once it's done installing there will be 3 new directories in repo directory,
+~lib~, ~include~ and ~doc~. The first contains the ~libclang~ static archive and some
+other dependency libs, the second contains the ~libclang~ headers and the third
+a small example program that walks a C++ header file containing an ~enum~ and a
+Makefile that can be adapted to your needs. To build and run it:
+#+BEGIN_EXAMPLE
+> cd libclang-static-build
+> cd doc/example/static
+> make
+> ./clang_visitor
+Cursor spelling, kind: __ENUM__, macro definition
+Cursor spelling, kind: Enum, EnumDecl
+Cursor spelling, kind: RED, EnumConstantDecl
+Cursor spelling, kind: , UnexposedExpr
+Cursor spelling, kind: , IntegerLiteral
+Cursor spelling, kind: , IntegerLiteral
+Cursor spelling, kind: GREEN, EnumConstantDecl
+Cursor spelling, kind: , UnexposedExpr
+Cursor spelling, kind: , BinaryOperator
+Cursor spelling, kind: , BinaryOperator
+Cursor spelling, kind: , IntegerLiteral
+Cursor spelling, kind: , IntegerLiteral
+Cursor spelling, kind: BLUE, EnumConstantDecl
+Cursor spelling, kind: , UnexposedExpr
+Cursor spelling, kind: , BinaryOperator
+Cursor spelling, kind: , BinaryOperator
+Cursor spelling, kind: RED, DeclRefExpr
+Cursor spelling, kind: GREEN, DeclRefExpr
+#+END_EXAMPLE
+
+And that's it! The rest of this document is a literate program which explains
+all the CMake scripts. It is only of interest if you want to get into
+implementation details and can otherwise be skipped.
+
+* Implementation
+The overall strategy is to download the pre-built ~libclang~ for the current platform not so much for the ~libclang.so~ library itself but for all the statically linked LLVM libraries and CMake scripts that come with it, then retrieve the ~clang~ sources and compile only ~libclang~ bits locally into a static library and then use an [[https://sourceware.org/binutils/docs/binutils/ar-scripts.html][MRI script]] to bundle it, the LLVM libs and other dependencies into an all-in-one static archive.
+
+Those "other dependencies" are [[https://invisible-island.net/ncurses/announce.html][ncurses]] and [[https://github.com/Z3Prover/z3][z3]]. The latter is understandable, ~clang~ probably uses it for typechecking and fortunately the project releases prebuilt static archives for the major platforms but the former is super annoying and always seems to cause problems on Linux when upgrading so I compile and build a static archive in place and both get chucked into the final fat archive.
+
+And finally there's an example app that gets generated and installed as well.
+** Preamble
+~3.13~ is a relatively old version but it's what macOS Mojave ships with and it's enough.
+#+BEGIN_SRC cmake :tangle CMakeLists.txt
+cmake_minimum_required(VERSION 3.13)
+project(libclang-linux-static)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
+set(LIBCLANG_EXAMPLES "${CMAKE_CURRENT_SOURCE_DIR}/cmake/examples")
+#+END_SRC
+** Clang and NCurses Download URLs
+"Reproducibility" is achieved by hard-coding the URLs from which to get the dependencies, I'm sure there's more principled ways but this works ok for now.
+#+BEGIN_SRC cmake :tangle CMakeLists.txt
+if(APPLE)
+  set(LIBCLANG_PREBUILT_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang+llvm-10.0.0-x86_64-apple-darwin.tar.xz)
+else()
+  set(LIBCLANG_PREBUILT_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang+llvm-10.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz)
+endif()
+set(CLANG_SOURCES_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang-10.0.0.src.tar.xz)
+set(NCURSES_SOURCES_URL https://ftp.gnu.org/pub/gnu/ncurses/ncurses-6.2.tar.gz)
+if(APPLE)
+  set(Z3_PREBUILT_URL https://github.com/Z3Prover/z3/releases/download/z3-4.8.7/z3-4.8.7-x64-osx-10.14.6.zip)
+else()
+  set(Z3_PREBUILT_URL https://github.com/Z3Prover/z3/releases/download/z3-4.8.7/z3-4.8.7-x64-ubuntu-16.04.zip)
+endif()
+#+END_SRC
+** Download Libclang, NCurses and Z3
+Now I download and unpack at *build* *time*, I should probably check the checksum too but whatever for now.
+#+BEGIN_SRC cmake :tangle CMakeLists.txt
+include(Download)
+message(STATUS "Downloading ncurses sources, prebuilt z3 & prebuilt libclang with sources; this is ~500MB, please be patient ...")
+set(NCURSES_SOURCE_DIR)
+download(ncurses_sources ${NCURSES_SOURCES_URL} NCURSES_DOWNLOAD_DIR)
+set(LIBCLANG_SOURCES_DIR)
+download(clang_sources ${CLANG_SOURCES_URL} LIBCLANG_SOURCES_DIR)
+set(Z3_PREBUILT_DIR)
+download(z3_prebuilt ${Z3_PREBUILT_URL} Z3_PREBUILT_DIR)
+set(LIBCLANG_PREBUILT_DIR)
+download(libclang_prebuilt ${LIBCLANG_PREBUILT_URL} LIBCLANG_PREBUILT_DIR)
+#+END_SRC
+** Configure NCurses as an external project
+~ncurses~ does not provide prebuilt static archives so it is built in place. The build recipe is stolen from Arch scripts.
+#+BEGIN_SRC cmake :tangle CMakeLists.txt
+include(ExternalProject)
+ExternalProject_Add(ncurses
+  SOURCE_DIR ${NCURSES_DOWNLOAD_DIR}
+  CONFIGURE_COMMAND <SOURCE_DIR>/configure --with-shared --with-static --with-normal --without-debug --without-ada --enable-widec --disable-pc-files --with-cxx-binding --without-cxx-shared --with-abi-version=5
+  BUILD_COMMAND make
+  INSTALL_COMMAND ""
+  )
+#+END_SRC
+** Setup CMake Paths And Includes
+The first two lines are why I used CMake for this project in the first place, they contain useful functions and macros that take care of the nitty gritty C++ compiler and inclusion flags that allow building ~libclang~ from source, without them this project would have been impossible.
+#+BEGIN_SRC cmake :tangle CMakeLists.txt
+list(APPEND CMAKE_MODULE_PATH "${LIBCLANG_PREBUILT_DIR}/lib/cmake/clang")
+list(APPEND CMAKE_MODULE_PATH "${LIBCLANG_PREBUILT_DIR}/lib/cmake/llvm")
+list(APPEND CMAKE_MODULE_PATH "${LIBCLANG_SOURCES_DIR}/cmake/modules")
+include(LibClangBuild)
+include(HandleLLVMOptions)
+include(AddLLVM)
+include(AddClang)
+include(ARBundle)
+#+END_SRC
+** Build A Static Libclang
+First off I have to tell the C++ compiler to use C++14 features, this only seems to be required for macOS but doesn't hurt on the Linux side.
+#+BEGIN_SRC cmake :tangle CMakeLists.txt
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+#+END_SRC
+
+~get_libclang_sources_and_headers~ populates the last three arguments with _absolute_ paths to headers, ~libclang~ sources and the included LLVM archives.
+#+BEGIN_SRC cmake :tangle CMakeLists.txt
+get_libclang_sources_and_headers(
+  ${LIBCLANG_SOURCES_DIR}
+  ${LIBCLANG_PREBUILT_DIR}
+  LIBCLANG_SOURCES
+  LIBCLANG_ADDITIONAL_HEADERS
+  LIBCLANG_PREBUILT_LIBS
+  )
+#+END_SRC
+
+~add_clang_library~ is a ~libclang~ provided CMake function that does all the hard work of generating Makefiles to build a ~clang~ and LLVM based library or executable. We use it twice, once to generate a static archive and once more for a shared library. While a shared library is generated I haven't gotten around to documenting it's use or providing examples so I don't mention it in [[Getting Started][Getting Started]].
+#+BEGIN_SRC cmake :tangle CMakeLists.txt
+include_directories(${LIBCLANG_PREBUILT_DIR}/include)
+add_clang_library(libclang_static
+  STATIC
+  DEPENDS ncurses
+  OUTPUT_NAME clang_static
+  ${LIBCLANG_SOURCES}
+  ADDITIONAL_HEADERS ${LIBCLANG_ADDITIONAL_HEADERS}
+  )
+ExternalProject_Get_Property(ncurses BINARY_DIR)
+set(NCURSES_BINARY_DIR ${BINARY_DIR})
+if(APPLE)
+  set(NCURSES_SHARED_LIB ${NCURSES_BINARY_DIR}/lib/libncursesw.dylib)
+else()
+  set(NCURSES_SHARED_LIB ${NCURSES_BINARY_DIR}/lib/libncursesw.so)
+endif()
+unset(BINARY_DIR)
+if(APPLE)
+  set(Z3_SHARED_LIB ${Z3_PREBUILT_DIR}/bin/libz3.dylib)
+else()
+  set(Z3_SHARED_LIB ${Z3_PREBUILT_DIR}/bin/libz3.so)
+endif()
+add_clang_library(libclang_shared
+  SHARED
+  DEPENDS ncurses
+  OUTPUT_NAME clang_shared
+  ${LIBCLANG_SOURCES}
+  ADDITIONAL_HEADERS ${LIBCLANG_ADDITIONAL_HEADERS}
+  LINK_LIBS
+  ${LIBCLANG_PREBUILT_LIBS}
+  ${NCURSES_SHARED_LIB}
+  ${Z3_SHARED_LIB}
+  dl
+  pthread
+  z
+  LINK_COMPONENTS ${LLVM_TARGETS_TO_BUILD}
+  )
+set_target_properties(libclang_shared PROPERTIES VERSION 10)
+#+END_SRC
+
+~arBundle~ generates the MRI script that takes all the required LLVM and dependency archives and creates a fat archive.
+#+BEGIN_SRC cmake :tangle CMakeLists.txt
+arBundle("libclang_static_bundled.a"
+  ${CMAKE_CURRENT_BINARY_DIR}/libclang_static.a
+  ${LIBCLANG_PREBUILT_LIBS}
+  ${NCURSES_BINARY_DIR}/lib/libncursesw.a
+  ${Z3_PREBUILT_DIR}/bin/libz3.a
+  )
+#+END_SRC
+
+For reasons I don't understand the 'ar' utility provided by macOS does not support MRI script, _but_ as luck would have it the prebuilt ~libclang~ also provides ~llvm-ar~ which is presumably an LLVM backed ~ar~ which does seem support MRI scripts and works out of the box. Hope they keep shipping it!
+#+BEGIN_SRC cmake :tangle CMakeLists.txt
+if(APPLE)
+  set(AR_COMMAND ${LIBCLANG_PREBUILT_DIR}/bin/llvm-ar -M  <${CMAKE_CURRENT_BINARY_DIR}/bundle.mri)
+else()
+  set(AR_COMMAND ${CMAKE_AR} -M <${CMAKE_CURRENT_BINARY_DIR}/bundle.mri)
+endif()
+#+END_SRC
+
+Now I can create the bundle target:
+#+BEGIN_SRC cmake :tangle CMakeLists.txt
+add_custom_target(libclang_static_bundled ALL
+  COMMAND ${AR_COMMAND}
+  DEPENDS ncurses libclang_static libclang_shared
+  BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/libclang_static_bundled.a
+  )
+#+END_SRC
+
+All the archives and dependencies have now been built and bundled so now we can generate the example app. The values of all the ~MAKEFILE_BLAH_...~ variables are spliced into the [[Static Makefile][Static Makefile]] wherever you see ~@MAKEFILE_BLAH_...@~. That ~CMAKE_OSX_SYSROOT~ thing is simply so ~libclang~ headers can find the ~time.h~ on macOS. I'm really not sure why it isn't in the standard location. Additionally on macOS the executable seems to need ~libzlib~ which didn't seem required on Linux. Again, shrug, no idea.
+#+BEGIN_SRC cmake :tangle CMakeLists.txt
+set(MAKEFILE_LIBCLANG_INCLUDE ${CMAKE_INSTALL_PREFIX}/include)
+if(APPLE)
+  set(MAKEFILE_LIBCLANG_INCLUDE "${MAKEFILE_LIBCLANG_INCLUDE} -I${CMAKE_OSX_SYSROOT}/usr/include")
+endif()
+set(MAKEFILE_LIBCLANG_LIBDIR ${CMAKE_INSTALL_PREFIX}/lib)
+if(APPLE)
+  set(MAKEFILE_LIBCLANG_LIBDIR "${MAKEFILE_LIBCLANG_LIBDIR} -lz")
+endif()
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/examples/static)
+configure_file(${LIBCLANG_EXAMPLES}/Makefile_static.in ${CMAKE_CURRENT_BINARY_DIR}/examples/static/Makefile)
+file(COPY ${LIBCLANG_EXAMPLES}/clang_visitor.c DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/examples/static)
+file(COPY ${LIBCLANG_EXAMPLES}/sample.H DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/examples/static)
+#+END_SRC
+
+And now I can set up the install targets and we're done!
+#+BEGIN_SRC cmake :tangle CMakeLists.txt
+set(LIBCLANG_INSTALL_LIBS
+  ${CMAKE_CURRENT_BINARY_DIR}/libclang_static_bundled.a
+  ${Z3_PREBUILT_DIR}/bin/libz3.a
+  ${Z3_SHARED_LIB}
+  ${NCURSES_BINARY_DIR}/lib/libncursesw.a
+  ${NCURSES_SHARED_LIB}
+  )
+install(FILES ${LIBCLANG_INSTALL_LIBS} DESTINATION lib)
+install(DIRECTORY ${LIBCLANG_PREBUILT_DIR}/include/clang-c DESTINATION include)
+install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/examples DESTINATION doc)
+#+END_SRC
+** Helper Modules
+*** Build Time Downloads (Download.cmake)
+#+BEGIN_SRC cmake :tangle cmake/modules/Download.cmake
+include(FetchContent)
+function (download name url source_dir)
+  FetchContent_Declare(${name} URL ${url})
+  if(NOT ${name}_POPULATED)
+    message(STATUS "* Downloading ${name} from ${url}")
+    FetchContent_Populate(${name})
+  endif()
+  set(${source_dir} ${${name}_SOURCE_DIR} PARENT_SCOPE)
+endfunction()
+#+END_SRC
+*** Libclang sources, headers and static libs (LibClangBuild.cmake)
+These are the LLVM dependencies needed to build ~libclang~, most have been copied wholesale from the ~CMakeLists.txt~ provided with the project.
+#+BEGIN_SRC cmake :tangle cmake/modules/LibClangBuild.cmake
+set(LIBCLANG_SOURCE_PATH tools/libclang)
+set(LIBCLANG_INCLUDE_PATH include/clang-c)
+set(LIBCLANG_SOURCE_FILES
+  ARCMigrate.cpp
+  BuildSystem.cpp
+  CIndex.cpp
+  CIndexCXX.cpp
+  CIndexCodeCompletion.cpp
+  CIndexDiagnostic.cpp
+  CIndexHigh.cpp
+  CIndexInclusionStack.cpp
+  CIndexUSRs.cpp
+  CIndexer.cpp
+  CXComment.cpp
+  CXCursor.cpp
+  CXIndexDataConsumer.cpp
+  CXCompilationDatabase.cpp
+  CXLoadedDiagnostic.cpp
+  CXSourceLocation.cpp
+  CXStoredDiagnostic.cpp
+  CXString.cpp
+  CXType.cpp
+  Indexing.cpp
+  FatalErrorHandler.cpp
+)
+set(LIBCLANG_ADDITIONAL_HEADER_FILES
+  CIndexDiagnostic.h
+  CIndexer.h
+  CXCursor.h
+  CXLoadedDiagnostic.h
+  CXSourceLocation.h
+  CXString.h
+  CXTranslationUnit.h
+  CXType.h
+  Index_Internal.h
+)
+set(LIBCLANG_INDEX_H Index.h)
+#+END_SRC
+
+But this list took some experimentation, apparently we need all these libraries and in this approximate order for a ~libclang~ app to statically link correctly, I have no idea why I just tried stuff until it worked.
+#+BEGIN_SRC cmake :tangle cmake/modules/LibClangBuild.cmake
+set(LIBCLANG_LINK_LIBS
+  clangAST
+  clangBasic
+  clangDriver
+  clangFrontend
+  clangIndex
+  clangLex
+  clangSema
+  clangSerialization
+  clangTooling
+  clangARCMigrate
+  LLVMAArch64CodeGen
+  LLVMAArch64AsmParser
+  LLVMAArch64Desc
+  LLVMAArch64Disassembler
+  LLVMAArch64Info
+  LLVMAArch64Utils
+  LLVMAMDGPUCodeGen
+  LLVMAMDGPUAsmParser
+  LLVMAMDGPUDesc
+  LLVMAMDGPUDisassembler
+  LLVMAMDGPUInfo
+  LLVMAMDGPUUtils
+  LLVMARMCodeGen
+  LLVMARMAsmParser
+  LLVMARMDesc
+  LLVMARMDisassembler
+  LLVMARMInfo
+  LLVMARMUtils
+  LLVMBPFCodeGen
+  LLVMBPFAsmParser
+  LLVMBPFDesc
+  LLVMBPFDisassembler
+  LLVMBPFInfo
+  LLVMHexagonCodeGen
+  LLVMHexagonAsmParser
+  LLVMHexagonDesc
+  LLVMHexagonDisassembler
+  LLVMHexagonInfo
+  LLVMLanaiCodeGen
+  LLVMLanaiAsmParser
+  LLVMLanaiDesc
+  LLVMLanaiDisassembler
+  LLVMLanaiInfo
+  LLVMMipsCodeGen
+  LLVMMipsAsmParser
+  LLVMMipsDesc
+  LLVMMipsDisassembler
+  LLVMMipsInfo
+  LLVMMSP430CodeGen
+  LLVMMSP430AsmParser
+  LLVMMSP430Desc
+  LLVMMSP430Disassembler
+  LLVMMSP430Info
+  LLVMNVPTXCodeGen
+  LLVMNVPTXDesc
+  LLVMNVPTXInfo
+  LLVMPowerPCCodeGen
+  LLVMPowerPCAsmParser
+  LLVMPowerPCDesc
+  LLVMPowerPCDisassembler
+  LLVMPowerPCInfo
+  LLVMRISCVCodeGen
+  LLVMRISCVAsmParser
+  LLVMRISCVDesc
+  LLVMRISCVDisassembler
+  LLVMRISCVInfo
+  LLVMRISCVUtils
+  LLVMSparcCodeGen
+  LLVMSparcAsmParser
+  LLVMSparcDesc
+  LLVMSparcDisassembler
+  LLVMSparcInfo
+  LLVMSystemZCodeGen
+  LLVMSystemZAsmParser
+  LLVMSystemZDesc
+  LLVMSystemZDisassembler
+  LLVMSystemZInfo
+  LLVMWebAssemblyCodeGen
+  LLVMWebAssemblyAsmParser
+  LLVMWebAssemblyDesc
+  LLVMWebAssemblyDisassembler
+  LLVMWebAssemblyInfo
+  LLVMX86CodeGen
+  LLVMX86AsmParser
+  LLVMX86Desc
+  LLVMX86Disassembler
+  LLVMX86Info
+  LLVMX86Utils
+  LLVMXCoreCodeGen
+  LLVMXCoreDesc
+  LLVMXCoreDisassembler
+  LLVMXCoreInfo
+  LLVMCore
+  LLVMSupport
+  clangFormat
+  clangToolingInclusions
+  clangToolingCore
+  clangFrontend
+  clangDriver
+  LLVMOption
+  clangParse
+  clangSerialization
+  clangSema
+  clangEdit
+  clangRewrite
+  clangAnalysis
+  clangASTMatchers
+  clangAST
+  clangLex
+  clangBasic
+  LLVMAArch64Desc
+  LLVMAArch64Info
+  LLVMAArch64Utils
+  LLVMMIRParser
+  LLVMAMDGPUDesc
+  LLVMAMDGPUInfo
+  LLVMAMDGPUUtils
+  LLVMARMDesc
+  LLVMARMInfo
+  LLVMARMUtils
+  LLVMHexagonDesc
+  LLVMHexagonInfo
+  LLVMLanaiDesc
+  LLVMLanaiInfo
+  LLVMipo
+  LLVMVectorize
+  LLVMIRReader
+  LLVMAsmParser
+  LLVMInstrumentation
+  LLVMLinker
+  LLVMSystemZDesc
+  LLVMSystemZInfo
+  LLVMWebAssemblyDesc
+  LLVMWebAssemblyInfo
+  LLVMGlobalISel
+  LLVMAsmPrinter
+  LLVMDebugInfoDWARF
+  LLVMSelectionDAG
+  LLVMCodeGen
+  LLVMScalarOpts
+  LLVMAggressiveInstCombine
+  LLVMInstCombine
+  LLVMBitWriter
+  LLVMTransformUtils
+  LLVMTarget
+  LLVMAnalysis
+  LLVMProfileData
+  LLVMTextAPI
+  LLVMObject
+  LLVMBitReader
+  LLVMCore
+  LLVMRemarks
+  LLVMBitstreamReader
+  LLVMMCParser
+  LLVMMCDisassembler
+  LLVMMC
+  LLVMBinaryFormat
+  LLVMDebugInfoCodeView
+  LLVMDebugInfoMSF
+  LLVMSupport
+  LLVMCFGuard
+  LLVMFrontendOpenMP
+  LLVMDemangle
+  )
+#+END_SRC
+*** Add absolute path to sources and headers (LibClangBuild.cmake)
+#+BEGIN_SRC cmake :tangle cmake/modules/LibClangBuild.cmake
+function(get_libclang_sources_and_headers clang_source_path clang_prebuilt_path result_sources result_headers result_required_libs)
+  list(TRANSFORM LIBCLANG_SOURCE_FILES PREPEND ${clang_source_path}/${LIBCLANG_SOURCE_PATH}/ OUTPUT_VARIABLE RES)
+  set(${result_sources} ${RES} PARENT_SCOPE)
+  unset(RES)
+  list(TRANSFORM LIBCLANG_ADDITIONAL_HEADER_FILES PREPEND ${clang_source_path}/${LIBCLANG_SOURCE_PATH}/ OUTPUT_VARIABLE RES)
+  list(TRANSFORM LIBCLANG_INDEX_H PREPEND ${clang_source_path}/${LIBCLANG_INCLUDE_PATH}/ OUTPUT_VARIABLE RES1)
+  list(APPEND RES ${RES1})
+  set(${result_headers} ${RES} PARENT_SCOPE)
+  unset(RES)
+  list(TRANSFORM LIBCLANG_LINK_LIBS PREPEND ${clang_prebuilt_path}/lib/lib OUTPUT_VARIABLE RES)
+  list(TRANSFORM RES APPEND .a OUTPUT_VARIABLE RES)
+  set(${result_required_libs} ${RES} PARENT_SCOPE)
+  unset(RES)
+endfunction()
+#+END_SRC
+*** Build AR Bundling Script (ARBundle.cmake)
+#+BEGIN_SRC cmake :tangle cmake/modules/ARBundle.cmake
+function (arBundle lib)
+  set(FILE ${CMAKE_CURRENT_BINARY_DIR}/bundle.mri)
+  file(WRITE ${FILE} "CREATE ${lib}\n")
+  foreach(lib ${ARGN})
+    file(APPEND ${FILE} "ADDLIB ${lib}\n")
+  endforeach()
+  file(APPEND ${FILE} "SAVE\n")
+  file(APPEND ${FILE} "END")
+endfunction()
+#+END_SRC
+** Examples
+*** Static Makefile
+#+BEGIN_SRC makefile :tangle cmake/examples/Makefile_static.in
+CC=@CMAKE_C_COMPILER@
+CFLAGS=-I@MAKEFILE_LIBCLANG_INCLUDE@
+LIBS=-L@MAKEFILE_LIBCLANG_LIBDIR@ -lclang_static_bundled -lstdc++ -lm -ldl -lpthread
+OBJ=clang_visitor.o
+
+%.o: %.c
+	$(CC) -c -o $@ $< $(CFLAGS)
+
+clang_visitor: $(OBJ)
+	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
+
+.PHONY: clean
+
+clean:
+	rm *.o clang_visitor
+#+END_SRC
+*** Example Visitor
+#+BEGIN_SRC c :tangle cmake/examples/clang_visitor.c
+#include <clang-c/Index.h>
+#include <clang-c/CXString.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+enum CXChildVisitResult visitor(CXCursor cursor, CXCursor parent, CXClientData data) {
+    CXSourceLocation location = clang_getCursorLocation( cursor );
+    if(!clang_Location_isFromMainFile(location))
+        return CXChildVisit_Continue;
+    CXString cxspelling = clang_getCursorSpelling(cursor);
+    const char* spelling = clang_getCString(cxspelling);
+    CXString cxkind = clang_getCursorKindSpelling(clang_getCursorKind(cursor));
+    const char* kind = clang_getCString(cxkind);
+    printf("Cursor spelling, kind: %s, %s\n", spelling, kind);
+    clang_disposeString(cxspelling);
+    clang_disposeString(cxkind);
+    return CXChildVisit_Recurse;
+}
+
+int main(int argc, char** argv) {
+    CXIndex idx = clang_createIndex(1,1);
+    CXTranslationUnit tu = clang_createTranslationUnitFromSourceFile(idx, "sample.H", 0, 0, 0, 0);
+    clang_visitChildren(clang_getTranslationUnitCursor(tu), visitor, 0);
+    return 0;
+}
+#+END_SRC
+*** Sample C++ File
+#+BEGIN_SRC cpp :tangle cmake/examples/sample.H
+#ifndef __ENUM__
+#define __ENUM__
+
+enum Enum
+{
+  RED = 10,
+  GREEN = 10 << 2,
+  BLUE = RED + GREEN
+};
+
+
+#endif // __ENUM__
+#+END_SRC
