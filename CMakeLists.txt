@@ -30,7 +30,7 @@ download(libclang_prebuilt ${LIBCLANG_PREBUILT_URL} LIBCLANG_PREBUILT_DIR)
 include(ExternalProject)
 ExternalProject_Add(ncurses
   SOURCE_DIR ${NCURSES_DOWNLOAD_DIR}
-  CONFIGURE_COMMAND <SOURCE_DIR>/configure --with-shared --with-static --with-normal --without-debug --without-ada --enable-widec --disable-pc-files --with-cxx-binding --without-cxx-shared --with-abi-version=5
+  CONFIGURE_COMMAND <SOURCE_DIR>/configure --enable-rpath --prefix=${CMAKE_INSTALL_PREFIX} --with-shared --with-static --with-normal --without-debug --without-ada --enable-widec --disable-pc-files --with-cxx-binding --without-cxx-shared --with-abi-version=5
   BUILD_COMMAND make
   INSTALL_COMMAND ""
   )
@@ -66,9 +66,9 @@ add_clang_library(libclang_static
 ExternalProject_Get_Property(ncurses BINARY_DIR)
 set(NCURSES_BINARY_DIR ${BINARY_DIR})
 if(APPLE)
-  set(NCURSES_SHARED_LIB ${NCURSES_BINARY_DIR}/lib/libncursesw.dylib)
+  set(NCURSES_SHARED_LIB ${NCURSES_BINARY_DIR}/lib/libncursesw.dylib ${NCURSES_BINARY_DIR}/lib/libncursesw.5.dylib)
 else()
-  set(NCURSES_SHARED_LIB ${NCURSES_BINARY_DIR}/lib/libncursesw.so)
+  set(NCURSES_SHARED_LIB ${NCURSES_BINARY_DIR}/lib/libncursesw.so ${NCURSES_BINARY_DIR}/lib/libncursesw.so.5 ${NCURSES_BINARY_DIR}/lib/libncursesw.so.5.9)
 endif()
 unset(BINARY_DIR)
 if(APPLE)
@@ -85,7 +85,6 @@ add_clang_library(libclang_shared
   LINK_LIBS
   ${LIBCLANG_PREBUILT_LIBS}
   ${NCURSES_SHARED_LIB}
-  ${Z3_SHARED_LIB}
   dl
   pthread
   z
@@ -117,13 +116,19 @@ if(APPLE)
   set(MAKEFILE_LIBCLANG_INCLUDE "${MAKEFILE_LIBCLANG_INCLUDE} -I${CMAKE_OSX_SYSROOT}/usr/include")
 endif()
 set(MAKEFILE_LIBCLANG_LIBDIR ${CMAKE_INSTALL_PREFIX}/lib)
-if(APPLE)
-  set(MAKEFILE_LIBCLANG_LIBDIR "${MAKEFILE_LIBCLANG_LIBDIR} -lz")
-endif()
+
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/examples/static)
-configure_file(${LIBCLANG_EXAMPLES}/Makefile_static.in ${CMAKE_CURRENT_BINARY_DIR}/examples/static/Makefile)
+if(APPLE)
+  configure_file(${LIBCLANG_EXAMPLES}/Makefile_static_macos.in ${CMAKE_CURRENT_BINARY_DIR}/examples/static/Makefile)
+  configure_file(${LIBCLANG_EXAMPLES}/Makefile_shared_macos.in ${CMAKE_CURRENT_BINARY_DIR}/examples/shared/Makefile)
+else()
+  configure_file(${LIBCLANG_EXAMPLES}/Makefile_static.in ${CMAKE_CURRENT_BINARY_DIR}/examples/static/Makefile)
+  configure_file(${LIBCLANG_EXAMPLES}/Makefile_shared.in ${CMAKE_CURRENT_BINARY_DIR}/examples/shared/Makefile)
+endif()
 file(COPY ${LIBCLANG_EXAMPLES}/clang_visitor.c DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/examples/static)
 file(COPY ${LIBCLANG_EXAMPLES}/sample.H DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/examples/static)
+file(COPY ${LIBCLANG_EXAMPLES}/clang_visitor.c DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/examples/shared)
+file(COPY ${LIBCLANG_EXAMPLES}/sample.H DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/examples/shared)
 
 set(LIBCLANG_INSTALL_LIBS
   ${CMAKE_CURRENT_BINARY_DIR}/libclang_static_bundled.a
@@ -132,6 +137,7 @@ set(LIBCLANG_INSTALL_LIBS
   ${NCURSES_BINARY_DIR}/lib/libncursesw.a
   ${NCURSES_SHARED_LIB}
   )
-install(FILES ${LIBCLANG_INSTALL_LIBS} DESTINATION lib)
+
+install(PROGRAMS ${LIBCLANG_INSTALL_LIBS} DESTINATION lib)
 install(DIRECTORY ${LIBCLANG_PREBUILT_DIR}/include/clang-c DESTINATION include)
-install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/examples DESTINATION doc)
+install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/examples DESTINATION share/doc)

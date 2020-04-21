@@ -1,0 +1,17 @@
+CC=@CMAKE_C_COMPILER@
+CFLAGS=-I@MAKEFILE_LIBCLANG_INCLUDE@
+LIBDIR=@MAKEFILE_LIBCLANG_LIBDIR@
+LIBS=-lclang_shared -lz3 -lstdc++ -ldl -lpthread
+OBJ=clang_visitor.o
+
+%.o: %.c
+	$(CC) -c -o $@ $< $(CFLAGS)
+
+clang_visitor: $(OBJ)
+	$(CC) -o $@ $^ $(CFLAGS) -L$(LIBDIR) $(LIBS); \
+	install_name_tool -change libz3.dylib $(LIBDIR)/libz3.dylib $@; \
+	install_name_tool -add_rpath $(LIBDIR) $@;
+.PHONY: clean
+
+clean:
+	rm *.o clang_visitor

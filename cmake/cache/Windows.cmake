@@ -1,0 +1,6 @@
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
+include(Download)
+set(LIBCLANG_WINDOWS_URL https://ziglang.org/deps/llvm+clang+lld-10.0.0-x86_64-windows-msvc-release-mt.tar.xz)
+download(libclang_windows ${LIBCLANG_WINDOWS_URL} LIBCLANG_WINDOWS_SOURCE_DIR_TMP)
+set(LIBCLANG_WINDOWS_SOURCE_DIR ${LIBCLANG_WINDOWS_SOURCE_DIR_TMP} CACHE FILEPATH "")
+set(CMAKE_CXX_COMPILER ${LIBCLANG_WINDOWS_SOURCE_DIR}/bin/clang++.exe CACHE FILEPATH "")
