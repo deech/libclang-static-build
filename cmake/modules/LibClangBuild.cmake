@@ -201,6 +201,9 @@ set(LIBCLANG_LINK_LIBS
   LLVMFrontendOpenMP
   LLVMDemangle
   )
+if(MSVC)
+  list(APPEND LIBCLANG_LINK_LIBS LLVMAVRCodeGen LLVMAVRAsmParser LLVMAVRDisassembler LLVMAVRDesc LLVMAVRInfo)
+endif()
 
 function(get_libclang_sources_and_headers clang_source_path clang_prebuilt_path result_sources result_headers result_required_libs)
   list(TRANSFORM LIBCLANG_SOURCE_FILES PREPEND ${clang_source_path}/${LIBCLANG_SOURCE_PATH}/ OUTPUT_VARIABLE RES)
@@ -211,8 +214,13 @@ function(get_libclang_sources_and_headers clang_source_path clang_prebuilt_path 
   list(APPEND RES ${RES1})
   set(${result_headers} ${RES} PARENT_SCOPE)
   unset(RES)
-  list(TRANSFORM LIBCLANG_LINK_LIBS PREPEND ${clang_prebuilt_path}/lib/lib OUTPUT_VARIABLE RES)
-  list(TRANSFORM RES APPEND .a OUTPUT_VARIABLE RES)
+  if (NOT MSVC)
+    list(TRANSFORM LIBCLANG_LINK_LIBS PREPEND ${clang_prebuilt_path}/lib/lib OUTPUT_VARIABLE RES)
+    list(TRANSFORM RES APPEND .a OUTPUT_VARIABLE RES)
+  else()
+    list(TRANSFORM LIBCLANG_LINK_LIBS PREPEND ${clang_prebuilt_path}/lib/ OUTPUT_VARIABLE RES)
+    list(TRANSFORM RES APPEND .lib OUTPUT_VARIABLE RES)
+  endif()
   set(${result_required_libs} ${RES} PARENT_SCOPE)
   unset(RES)
 endfunction()
