@@ -2,7 +2,7 @@ set(LIBCLANG_PREBUILT_URL https://ziglang.org/deps/llvm+clang+lld-10.0.0-x86_64-
 set(CLANG_SOURCES_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang-10.0.0.src.tar.xz)
 
 include(Download)
-message(STATUS "Downloading prebuilt libclang with sources; this is ~500MB, please be patient ...")
+message(STATUS "Downloading prebuilt libclang with sources; this is ~500MB, please be patient, 'libclang_prebuilt' will take several minutes ...")
 download(clang_sources ${CLANG_SOURCES_URL} LIBCLANG_SOURCES_DIR)
 download(libclang_prebuilt ${LIBCLANG_PREBUILT_URL} LIBCLANG_PREBUILT_DIR)
 
