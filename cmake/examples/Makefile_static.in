@@ -1,6 +1,6 @@
 CC=@CMAKE_C_COMPILER@
 CFLAGS=-I@MAKEFILE_LIBCLANG_INCLUDE@
-LIBS=-L@MAKEFILE_LIBCLANG_LIBDIR@ -lclang_static_bundled -lstdc++ -lm -ldl -lpthread
+LIBS=-L@MAKEFILE_LIBCLANG_LIBDIR@ -lclang_bundled -lstdc++ -lm -ldl -lpthread
 OBJ=clang_visitor.o
 
 %.o: %.c
