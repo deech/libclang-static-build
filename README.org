@@ -1,4 +1,4 @@
-#+TITLE: Static Builds Of Libclang 10
+#+TITLE: Static Builds Of Libclang 12
 #+AUTHOR: Aditya Siram
 #+OPTIONS: ^:nil ;; let an underscore be an underscore, disable sub-superscripting
 #+OPTIONS: timestamp:nil
@@ -264,11 +264,11 @@ endif()
 dependencies, I'm sure there's more principled ways but this works ok for now.
 #+BEGIN_SRC cmake :tangle cmake/modules/LinuxMacosBuild.cmake
 if(APPLE)
-  set(LIBCLANG_PREBUILT_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang+llvm-10.0.0-x86_64-apple-darwin.tar.xz)
+  set(LIBCLANG_PREBUILT_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.0/clang+llvm-12.0.0-x86_64-apple-darwin.tar.xz)
 else()
-  set(LIBCLANG_PREBUILT_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang+llvm-10.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz)
+  set(LIBCLANG_PREBUILT_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.0/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz)
 endif()
-set(CLANG_SOURCES_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang-10.0.0.src.tar.xz)
+set(CLANG_SOURCES_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.0/clang-12.0.0.src.tar.xz)
 set(NCURSES_SOURCES_URL https://ftp.gnu.org/pub/gnu/ncurses/ncurses-6.2.tar.gz)
 if(APPLE)
   set(Z3_PREBUILT_URL https://github.com/Z3Prover/z3/releases/download/z3-4.8.7/z3-4.8.7-x64-osx-10.14.6.zip)
@@ -384,7 +384,7 @@ add_clang_library(libclang_static
   DEPENDS ncurses
   )
 
-set_target_properties(libclang PROPERTIES VERSION 10)
+set_target_properties(libclang PROPERTIES VERSION 12)
 #+END_SRC
 
 Pretty much copy-pasta'ed from the CMake build scripts that come with ~clang~
@@ -465,11 +465,10 @@ endif()
 set(MAKEFILE_LIBCLANG_LIBDIR ${CMAKE_INSTALL_PREFIX}/lib)
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/examples/static)
+configure_file(${LIBCLANG_EXAMPLES}/Makefile_static.in ${CMAKE_CURRENT_BINARY_DIR}/examples/static/Makefile)
 if(APPLE)
-  configure_file(${LIBCLANG_EXAMPLES}/Makefile_static_macos.in ${CMAKE_CURRENT_BINARY_DIR}/examples/static/Makefile)
   configure_file(${LIBCLANG_EXAMPLES}/Makefile_shared_macos.in ${CMAKE_CURRENT_BINARY_DIR}/examples/shared/Makefile)
 else()
-  configure_file(${LIBCLANG_EXAMPLES}/Makefile_static.in ${CMAKE_CURRENT_BINARY_DIR}/examples/static/Makefile)
   configure_file(${LIBCLANG_EXAMPLES}/Makefile_shared.in ${CMAKE_CURRENT_BINARY_DIR}/examples/shared/Makefile)
 endif()
 
@@ -504,8 +503,8 @@ install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/examples DESTINATION share/doc)
 #+END_SRC
 ** Windows
 #+BEGIN_SRC cmake :tangle cmake/modules/MSVCBuild.cmake
-set(LIBCLANG_PREBUILT_URL https://ziglang.org/deps/llvm+clang+lld-10.0.0-x86_64-windows-msvc-release-mt.tar.xz)
-set(CLANG_SOURCES_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang-10.0.0.src.tar.xz)
+set(LIBCLANG_PREBUILT_URL https://ziglang.org/deps/llvm+clang+lld-12.0.0-x86_64-windows-msvc-release-mt.tar.xz)
+set(CLANG_SOURCES_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.0/clang-12.0.0.src.tar.xz)
 
 include(Download)
 message(STATUS "Downloading prebuilt libclang with sources; this is ~500MB, please be patient, 'libclang_prebuilt' will take several minutes ...")
@@ -540,7 +539,7 @@ add_clang_library(libclang
   ADDITIONAL_HEADERS ${LIBCLANG_ADDITIONAL_HEADERS}
   )
 
-set_target_properties(libclang PROPERTIES VERSION 10)
+set_target_properties(libclang PROPERTIES VERSION 12)
 #+END_SRC
 
 This bit is important, without it every object file spews a [[https://docs.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warning-level-1-c4273?view=vs-2019][inconsistent DLL
@@ -711,7 +710,6 @@ set(LIBCLANG_LINK_LIBS
   LLVMRISCVDesc
   LLVMRISCVDisassembler
   LLVMRISCVInfo
-  LLVMRISCVUtils
   LLVMSparcCodeGen
   LLVMSparcAsmParser
   LLVMSparcDesc
@@ -732,7 +730,6 @@ set(LIBCLANG_LINK_LIBS
   LLVMX86Desc
   LLVMX86Disassembler
   LLVMX86Info
-  LLVMX86Utils
   LLVMXCoreCodeGen
   LLVMXCoreDesc
   LLVMXCoreDisassembler
@@ -808,10 +805,17 @@ set(LIBCLANG_LINK_LIBS
   LLVMCFGuard
   LLVMFrontendOpenMP
   LLVMDemangle
+  LLVMAVRCodeGen
+  LLVMAVRAsmParser
+  LLVMAVRDisassembler
+  LLVMAVRDesc
+  LLVMAVRInfo
+  LLVMPasses
+  LLVMCoroutines
+  LLVMSupport
+  LLVMObjCARCOpts
+  LLVMHelloNew
   )
-if(MSVC)
-  list(APPEND LIBCLANG_LINK_LIBS LLVMAVRCodeGen LLVMAVRAsmParser LLVMAVRDisassembler LLVMAVRDesc LLVMAVRInfo)
-endif()
 #+END_SRC
 *** Add absolute path to sources and headers (LibClangBuild.cmake)
 #+BEGIN_SRC cmake :tangle cmake/modules/LibClangBuild.cmake
@@ -852,26 +856,6 @@ endfunction()
 ** Examples
 *** Static Makefile
 #+BEGIN_SRC makefile :tangle cmake/examples/Makefile_static.in
-CC=@CMAKE_C_COMPILER@
-CFLAGS=-I@MAKEFILE_LIBCLANG_INCLUDE@
-LIBS=-L@MAKEFILE_LIBCLANG_LIBDIR@ -lclang_bundled -lstdc++ -lm -ldl -lpthread
-OBJ=clang_visitor.o
-
-%.o: %.c
-	$(CC) -c -o $@ $< $(CFLAGS)
-
-clang_visitor: $(OBJ)
-	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
-
-.PHONY: clean
-
-clean:
-	rm *.o clang_visitor
-#+END_SRC
-*** Static Makefile macOS
-For some reason on macOS I have to add a zlib dependency (-lz), otherwise this
-Makefile is identical to the one above
-#+BEGIN_SRC makefile :tangle cmake/examples/Makefile_static_macos.in
 CC=@CMAKE_C_COMPILER@
 CFLAGS=-I@MAKEFILE_LIBCLANG_INCLUDE@
 LIBS=-L@MAKEFILE_LIBCLANG_LIBDIR@ -lclang_bundled -lstdc++ -lm -ldl -lpthread -lz

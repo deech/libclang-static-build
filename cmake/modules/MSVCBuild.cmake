@@ -1,5 +1,5 @@
-set(LIBCLANG_PREBUILT_URL https://ziglang.org/deps/llvm+clang+lld-10.0.0-x86_64-windows-msvc-release-mt.tar.xz)
-set(CLANG_SOURCES_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang-10.0.0.src.tar.xz)
+set(LIBCLANG_PREBUILT_URL https://ziglang.org/deps/llvm+clang+lld-12.0.0-x86_64-windows-msvc-release-mt.tar.xz)
+set(CLANG_SOURCES_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.0/clang-12.0.0.src.tar.xz)
 
 include(Download)
 message(STATUS "Downloading prebuilt libclang with sources; this is ~500MB, please be patient, 'libclang_prebuilt' will take several minutes ...")
@@ -34,7 +34,7 @@ add_clang_library(libclang
   ADDITIONAL_HEADERS ${LIBCLANG_ADDITIONAL_HEADERS}
   )
 
-set_target_properties(libclang PROPERTIES VERSION 10)
+set_target_properties(libclang PROPERTIES VERSION 12)
 
 target_compile_definitions(obj.libclang PUBLIC "_CINDEX_LIB_")
 

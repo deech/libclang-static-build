@@ -103,7 +103,6 @@ set(LIBCLANG_LINK_LIBS
   LLVMRISCVDesc
   LLVMRISCVDisassembler
   LLVMRISCVInfo
-  LLVMRISCVUtils
   LLVMSparcCodeGen
   LLVMSparcAsmParser
   LLVMSparcDesc
@@ -124,7 +123,6 @@ set(LIBCLANG_LINK_LIBS
   LLVMX86Desc
   LLVMX86Disassembler
   LLVMX86Info
-  LLVMX86Utils
   LLVMXCoreCodeGen
   LLVMXCoreDesc
   LLVMXCoreDisassembler
@@ -200,10 +198,17 @@ set(LIBCLANG_LINK_LIBS
   LLVMCFGuard
   LLVMFrontendOpenMP
   LLVMDemangle
+  LLVMAVRCodeGen
+  LLVMAVRAsmParser
+  LLVMAVRDisassembler
+  LLVMAVRDesc
+  LLVMAVRInfo
+  LLVMPasses
+  LLVMCoroutines
+  LLVMSupport
+  LLVMObjCARCOpts
+  LLVMHelloNew
   )
-if(MSVC)
-  list(APPEND LIBCLANG_LINK_LIBS LLVMAVRCodeGen LLVMAVRAsmParser LLVMAVRDisassembler LLVMAVRDesc LLVMAVRInfo)
-endif()
 
 function(get_libclang_sources_and_headers clang_source_path clang_prebuilt_path result_sources result_headers result_required_libs)
   list(TRANSFORM LIBCLANG_SOURCE_FILES PREPEND ${clang_source_path}/${LIBCLANG_SOURCE_PATH}/ OUTPUT_VARIABLE RES)

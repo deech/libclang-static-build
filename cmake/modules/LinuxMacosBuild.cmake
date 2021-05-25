@@ -1,9 +1,9 @@
 if(APPLE)
-  set(LIBCLANG_PREBUILT_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang+llvm-10.0.0-x86_64-apple-darwin.tar.xz)
+  set(LIBCLANG_PREBUILT_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.0/clang+llvm-12.0.0-x86_64-apple-darwin.tar.xz)
 else()
-  set(LIBCLANG_PREBUILT_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang+llvm-10.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz)
+  set(LIBCLANG_PREBUILT_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.0/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz)
 endif()
-set(CLANG_SOURCES_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/clang-10.0.0.src.tar.xz)
+set(CLANG_SOURCES_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.0/clang-12.0.0.src.tar.xz)
 set(NCURSES_SOURCES_URL https://ftp.gnu.org/pub/gnu/ncurses/ncurses-6.2.tar.gz)
 if(APPLE)
   set(Z3_PREBUILT_URL https://github.com/Z3Prover/z3/releases/download/z3-4.8.7/z3-4.8.7-x64-osx-10.14.6.zip)
@@ -87,7 +87,7 @@ add_clang_library(libclang_static
   DEPENDS ncurses
   )
 
-set_target_properties(libclang PROPERTIES VERSION 10)
+set_target_properties(libclang PROPERTIES VERSION 12)
 
 if(APPLE)
   set(LIBCLANG_LINK_FLAGS " -Wl,-compatibility_version -Wl,1")
@@ -145,11 +145,10 @@ endif()
 set(MAKEFILE_LIBCLANG_LIBDIR ${CMAKE_INSTALL_PREFIX}/lib)
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/examples/static)
+configure_file(${LIBCLANG_EXAMPLES}/Makefile_static.in ${CMAKE_CURRENT_BINARY_DIR}/examples/static/Makefile)
 if(APPLE)
-  configure_file(${LIBCLANG_EXAMPLES}/Makefile_static_macos.in ${CMAKE_CURRENT_BINARY_DIR}/examples/static/Makefile)
   configure_file(${LIBCLANG_EXAMPLES}/Makefile_shared_macos.in ${CMAKE_CURRENT_BINARY_DIR}/examples/shared/Makefile)
 else()
-  configure_file(${LIBCLANG_EXAMPLES}/Makefile_static.in ${CMAKE_CURRENT_BINARY_DIR}/examples/static/Makefile)
   configure_file(${LIBCLANG_EXAMPLES}/Makefile_shared.in ${CMAKE_CURRENT_BINARY_DIR}/examples/shared/Makefile)
 endif()
 
