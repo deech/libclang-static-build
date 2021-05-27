@@ -8,13 +8,12 @@ This package consists of a set of [[https://cmake.org][CMake]] scripts that down
 [[https://clang.llvm.org/docs/Tooling.html][libclang]] into a single static archive containing all LLVM and third
 party dependencies so applications which link against it can be easily deployed.
 
-Currently it works on Linux (should work on any distro but tested on Ubuntu
-19.04 and Manjaro), macOS Mojave and Windows 10 using the MS Visual C++
-toolchain. As an aside the Windows build is only possible because the [[https://ziglang.org/][Zig]]
-project generously provides [[https://github.com/ziglang/zig/wiki/Building-Zig-on-Windows][prebuilt statically linked LLVM libraries]] for
-Windows, if you are benefiting please consider [[https://github.com/sponsors/andrewrk][contributing]], it's immensely
-annoying and time-consuming to build ~LLVM~ and ~clang~ from scratch and we
-should support Andy Kelley for saving us the trouble.
+Currently it works on Linux with [[*Issues with GCC < 10 on Linux][gcc/g++ > 10]], macOS Mojave and Windows 10 using
+the MS Visual C++ toolchain. As an aside the Windows build is only possible
+because the [[https://ziglang.org/][Zig]] project generously provides [[https://github.com/ziglang/zig/wiki/Building-Zig-on-Windows][prebuilt statically linked LLVM
+libraries]] for Windows, if you are benefiting please consider [[https://github.com/sponsors/andrewrk][contributing]], it's
+immensely annoying and time-consuming to build ~LLVM~ and ~clang~ from scratch
+and we should support Andy Kelley for saving us the trouble.
 
 On Linux and macOS ~LLVM~ and ~libclang~ are *not* compiled from scratch, that
 would take 5-7 hours, instead I reuse the [[https://releases.llvm.org/download.html][prebuilt releases]] provided by LLVM. On
@@ -93,7 +92,7 @@ to deploy because of dependencies on third party libraries like [[https://invisi
 Package managers do a decent job of orchestrating the install but it's still
 hard to deploy an application that's pinned to a specific version of ~libclang~
 or to ship binaries between distributions. There's always containers or [[https://nixos.org/nix/][Nix]] or
-[[https://guix.gnu.org/][Guix]] but to my mind asking people to get up to speed on purely functional
+[[https://guix.gnu.org/][Guix]] but I think asking people to get up to speed on purely functional
 package managers or have [[https://www.docker.com/][Docker]] running just to use ~libclang~ apps is a
 non-starter. With this package all you need is [[https://cmake.org][CMake]] on macOS and Linux but only
 initially to build and install a static ~libclang~ archive; after that you can
@@ -114,6 +113,15 @@ cmake version 3.17.0
 
 CMake suite maintained and supported by Kitware (kitware.com/cmake).
 #+END_EXAMPLE
+
+and [[*Issues with GCC < 10 on Linux][gcc/g++ 10 or greater]]:
+#+begin_example
+> g++ --version
+g++ (Debian 10.2.1-6) 10.2.1 20210110
+Copyright (C) 2020 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#+end_example
 
 Clone this repo, create a ~build~ directory inside it and run the build and install:
 #+BEGIN_EXAMPLE
@@ -323,6 +331,7 @@ include(GatherArchives)
 #+BEGIN_SRC cmake :tangle cmake/modules/LinuxMacosBuild.cmake
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
 #+END_SRC
 
 ~get_libclang_sources_and_headers~ populates the last three arguments with
@@ -979,3 +988,15 @@ int main(int argc, char** argv) {
     return 0;
 }
 #+END_SRC
+* Issues with GCC < 10 on Linux
+  When building if you get linker errors that look like:
+  #+begin_example
+  undefined reference to `std::_Sp_make_shared_tag::_S_eq(std::type_info const&)
+  #+end_example
+  that means you have a gcc/g++ version less than 10 and need to upgrade. I ran
+  into this issue with Debian Buster which is still on 8.3.0 and moving to
+  Bullseye worked.
+
+  If upgrading isn't possible the [[https://github.com/deech/libclang-static-build/commit/f3e41db2f59e3ca850883b621ffc550736258ff1][libclang 10 static build]] will work
+  with older versions.
+ 
