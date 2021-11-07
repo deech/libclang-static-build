@@ -118,6 +118,7 @@ set(LIBCLANG_LINK_LIBS
   LLVMWebAssemblyDesc
   LLVMWebAssemblyDisassembler
   LLVMWebAssemblyInfo
+  LLVMWebAssemblyUtils
   LLVMX86CodeGen
   LLVMX86AsmParser
   LLVMX86Desc
@@ -207,7 +208,6 @@ set(LIBCLANG_LINK_LIBS
   LLVMCoroutines
   LLVMSupport
   LLVMObjCARCOpts
-  LLVMHelloNew
   )
 
 function(get_libclang_sources_and_headers clang_source_path clang_prebuilt_path result_sources result_headers result_required_libs)
