@@ -1,28 +1,29 @@
-#+TITLE: Static Builds Of Libclang 12
+#+TITLE: Static Builds Of Libclang 13
 #+AUTHOR: Aditya Siram
 #+OPTIONS: ^:nil ;; let an underscore be an underscore, disable sub-superscripting
 #+OPTIONS: timestamp:nil
 
 * Introduction
 This package consists of a set of [[https://cmake.org][CMake]] scripts that download and compile
-[[https://clang.llvm.org/docs/Tooling.html][libclang]] into a single static archive containing all LLVM and third
-party dependencies so applications which link against it can be easily deployed.
+[[https://clang.llvm.org/docs/Tooling.html][libclang]] into a single static archive containing all LLVM and third party
+dependencies so applications which link against it can be easily deployed. The
+build also produces a bundled shared library which allows faster iteration
+during development time by avoiding link time slowdowns. The build takes only
+about 7 minutes on my modestly provisioned 7 year old i5/16GB RAM Thinkpad
+instead of 5-7 hours for a normal from-scratch LLVM build.
 
-Currently it works on Linux with [[*Issues with GCC < 10 on Linux][gcc/g++ > 10]], macOS Mojave and Windows 10 using
+I tested it on Manjaro Linux with GCC 11.1.0, macOS Mojave and Windows 10 using
 the MS Visual C++ toolchain. As an aside the Windows build is only possible
 because the [[https://ziglang.org/][Zig]] project generously provides [[https://github.com/ziglang/zig/wiki/Building-Zig-on-Windows][prebuilt statically linked LLVM
 libraries]] for Windows, if you are benefiting please consider [[https://github.com/sponsors/andrewrk][contributing]], it's
 immensely annoying and time-consuming to build ~LLVM~ and ~clang~ from scratch
 and we should support Andy Kelley for saving us the trouble.
 
-On Linux and macOS ~LLVM~ and ~libclang~ are *not* compiled from scratch, that
-would take 5-7 hours, instead I reuse the [[https://releases.llvm.org/download.html][prebuilt releases]] provided by LLVM. On
-my 6 year old i5 Thinkpad with 16 GB RAM after the downloads completed the whole
-process took about 7 minutes.
-
-To convince you it works as advertised the package also ships with a little
-statically linked example app ~clang_visitor~ that traverses some C++ AST nodes.
-Here are its runtime dependencies on Linux:
+A small easy-to-build demo app ~clang_visitor~ that parses some C++ is also
+included to help you get started. And to convince you the build works as
+advertised below are the minimal runtime dependencies on each of the supported
+platforms when the app is linked against the static archive:
+- Linux
 #+BEGIN_EXAMPLE
 > $ ldd ./clang_visitor
 	linux-vdso.so.1 (0x00007ffce8bfb000)
@@ -34,7 +35,7 @@ Here are its runtime dependencies on Linux:
 	libc.so.6 => /usr/lib/libc.so.6 (0x00007fdb991fd000)
 	/lib64/ld-linux-x86-64.so.2 => /usr/lib64/ld-linux-x86-64.so.2 (0x00007fdb9ea9b000)
 #+END_EXAMPLE
-... on macOS Mojave:
+- macOS Mojave:
 #+BEGIN_EXAMPLE
 > otool -L clang_visitor
 clang_visitor:
@@ -42,7 +43,7 @@ clang_visitor:
 	/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 400.9.4)
 	/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1252.250.1)
 #+END_EXAMPLE
-.. and on Windows 10
+- ... and Windows 10
 #+BEGIN_EXAMPLE
 > dumpbin.exe /DEPENDENTS clang_visitor.exe
 Microsoft (R) COFF/PE Dumper Version 14.25.28614.0
@@ -86,24 +87,23 @@ File Type: EXECUTABLE IMAGE
 #+END_EXAMPLE
 
 * Motivation
-Currently the best way statically analyze C and C++ source is [[https://clang.llvm.org/docs/Tooling.html][libclang]].
+Currently the best way to statically analyze C and C++ source is [[https://clang.llvm.org/docs/Tooling.html][libclang]].
 Unfortunately applications built against ~libclang~ aren't very portable or easy
-to deploy because of dependencies on third party libraries like [[https://invisible-island.net/ncurses/][ncurses]] and [[https://github.com/Z3Prover/z3][z3]].
-Package managers do a decent job of orchestrating the install but it's still
-hard to deploy an application that's pinned to a specific version of ~libclang~
-or to ship binaries between distributions. There's always containers or [[https://nixos.org/nix/][Nix]] or
-[[https://guix.gnu.org/][Guix]] but I think asking people to get up to speed on purely functional
-package managers or have [[https://www.docker.com/][Docker]] running just to use ~libclang~ apps is a
-non-starter. With this package all you need is [[https://cmake.org][CMake]] on macOS and Linux but only
-initially to build and install a static ~libclang~ archive; after that you can
-develop with simple Makefiles if you like and ship users fat binaries with
-minimal dependencies. On Windows 10 you additionally need [[https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2019][Visual Studio Build
-Tools]] and CMake for building apps but with the same benefits.
+to deploy because of dependencies on third party libraries like [[https://invisible-island.net/ncurses/][ncurses]] and [[https://github.com/Z3Prover/z3][z3]]
+and the ~libclang~ shared library itself. Package managers do a decent job of
+orchestrating the install but it's still hard to deploy an application that's
+pinned to a specific version of ~libclang~ or to ship binaries between Linux
+distributions. There's always containers or [[https://nixos.org/nix/][Nix]] or [[https://guix.gnu.org/][Guix]] but I think asking
+people to get up to speed on purely functional package managers or have [[https://www.docker.com/][Docker]]
+running just to use ~libclang~ apps is a non-starter. With this package all you
+need is [[https://cmake.org][CMake]] on macOS and Linux and additionally [[https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2019][Visual Studio Build Tools]] on
+Windows.
+
 * Getting Started
 Below are some instructions on getting up and running on Linux, macOS and
-Windows 10. Everything beyond that is the full source of the build scripts as a
-literate program and only of interest to those who care the about implementation
-details. If you just want to use this package it can be safely skipped. Enjoy!
+Windows 10. Everything beyond that is the full build as a literate program and
+only interesting if you care about implementation details. If you just want to
+use this package it can be safely skipped. Enjoy!
 ** Linux and macOS
 *** Building
 First make sure you have a ~cmake~ version greater that 3.13:
@@ -114,7 +114,7 @@ cmake version 3.17.0
 CMake suite maintained and supported by Kitware (kitware.com/cmake).
 #+END_EXAMPLE
 
-and [[*Issues with GCC < 10 on Linux][gcc/g++ 10 or greater]]:
+and ~gcc~/~g++~ > 10:
 #+begin_example
 > g++ --version
 g++ (Debian 10.2.1-6) 10.2.1 20210110
@@ -145,14 +145,10 @@ examples that shows how to create static and shared ~libclang~ apps.
 *** Running The Examples
 The two example directories ~share/doc/examples/static~ and
 ~share/doc/examples/shared~ both of which contain an identical small example
-program that walks a C++ header file containing an ~enum~, the difference is the
-first has a Makefile that generates a static-linked executable and the second a
-Makefile that uses the shared versions of ~libclang~, ~ncurses~ and ~z3~. The
-statically linked version takes a few seconds to compile & link and results in a
-95MB executable, the second compiles & links almost instantaneously making it
-more convenient for development and generates a 17KB executable with runtime
-dependencies . Both build with a single call to ~make~, to run the
-statically-linked version for example:
+program that walks a C++ header file containing an ~enum~, the first builds a
+large (100MB+) statically linked executable with minimal dependencies and the
+second a much smaller shared executable which depends ~libclang~, ~ncurses~ and
+~z3~ at runtime. To build them run ~make~ in their respective directories:
 #+BEGIN_EXAMPLE
 > cd libclang-static-build
 > cd doc/example/static
@@ -195,12 +191,11 @@ don't have to go hunt it down.
 
 There should now be 3 new directories in the repo directory, ~lib~, ~include~,
 and ~share~. The first contains ~clang_static_bundled.lib~ which is a 400MB
-static archive, the second ~include~ has all the headers needed to build
-~libclang~ apps and the third ~share~ has a single example ~libclang~ app that
-shows how to statically link.
+static archive, ~include~ has all the headers needed to build ~libclang~ apps
+and ~share~ has a single statically linked demo app.
 *** Running The Example
-The example directory ~share/doc/examples/static~ contains an example
-CMake project that walks a C++ header file containing an ~enum~. To build it:
+The example directory ~share/doc/examples/static~ contains a small demo
+that parses out a C++ ~enum~ from a header file. To build it:
 #+begin_example
 > cd libclang-static-build\share\doc\examples\static
 > mkdir build
@@ -208,8 +203,8 @@ CMake project that walks a C++ header file containing an ~enum~. To build it:
 > cmake.exe -G "Visual Studio 16 2019" .. -DCMAKE_INSTALL_PREFIX=..
 > "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin\MSBuild.exe" /m -p:Configuration=Release INSTALL.vcxproj
 #+end_example
-Once done directory above the ~build~ directory now has a new directory ~bin~
-which contains the example app ~clang_visitor.exe~:
+The directory above the ~build~ directory now contains ~bin~ which contains the
+example app ~clang_visitor.exe~:
 #+begin_example
 >cd ..\bin
 >clang_visitor_static.exe
@@ -227,26 +222,21 @@ Cursor spelling, kind: RED, DeclRefExpr
 Cursor spelling, kind: GREEN, DeclRefExpr
 #+end_example
 * Implementation
-The overall idea is to download a ~libclang~ release that comes with pre-built
-LLVM static archives for the current platform, download the ~clang~ sources
-themselves and rebuild only the ~libclang~ piece. Then create a single fat
-static archive that references the just built static ~libclang~ all prebuilt
-LLVM static libraries. This cuts overall build time from hours to about 7
-minutes.
+At a high level to build a bundled shared and static library I grab the
+prebuilt ~clang+LLVM~ static archives and ~libclang~ sources, build the latter
+from scratch locally and then bundle it along with all the prebuilt archives
+into one large library that an executable can link against.
 
-On Linux and macOS the build also downloads [[https://invisible-island.net/ncurses/announce.html][ncurses]] and [[https://github.com/Z3Prover/z3][z3]] because they are
-dependencies of ~libclang~. ~z3~ releases prebuilt static archives for the major
-platforms but ~ncurses~ does not so I have to build it in place. Fortunately
-it's just a the standard ~configure; make; make install~ dance and doesn't have
-dependencies of its own. They are folded into the archive.
+Additionally on Linux and macOS ~libclang~ depends[[https://github.com/Z3Prover/z3][ z3]] and [[https://invisible-island.net/ncurses/announce.html][ncurses]]. While the
+former has official prebuilt releases the latter does not and so we have to
+build from source locally. Both are then folded into the resulting library.
 
-On Windows 10 the situation is actually a little nicer because, as mentioned
-[[Introduction][above]], [[https://ziglang.org/][the Zig project]] provides [[https://github.com/ziglang/zig/wiki/Building-Zig-on-Windows][prebuilt LLVM archives]] with no dependency on
-~z3~ so the build goes quite a bit faster. Do [[https://github.com/sponsors/andrewrk][support Zig]] if you can.
+On Windows 10 the situation is nicer because [[https://ziglang.org/][the Zig project]] provides [[https://github.com/ziglang/zig/wiki/Building-Zig-on-Windows][prebuilt
+LLVM archives]] with no dependency on ~z3~ so the build actually goes quite a bit
+faster than the other platforms. Do [[https://github.com/sponsors/andrewrk][support Zig]] if you can.
 
-And finally there's a little example app that gets generated and installed as
-well; on Linux and macOS it's a standard Make project and a CMake project on
-Windows.
+And finally we generate a small demo that traverses a C++ header; on Linux and
+macOS it's a standard Make project and a CMake project on Windows.
 ** Preamble
 #+BEGIN_SRC cmake :tangle CMakeLists.txt
 cmake_minimum_required(VERSION 3.13)
@@ -272,11 +262,11 @@ endif()
 dependencies, I'm sure there's more principled ways but this works ok for now.
 #+BEGIN_SRC cmake :tangle cmake/modules/LinuxMacosBuild.cmake
 if(APPLE)
-  set(LIBCLANG_PREBUILT_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.0/clang+llvm-12.0.0-x86_64-apple-darwin.tar.xz)
+  set(LIBCLANG_PREBUILT_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-13.0.0/clang+llvm-13.0.0-x86_64-apple-darwin.tar.xz)
 else()
-  set(LIBCLANG_PREBUILT_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.0/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz)
+  set(LIBCLANG_PREBUILT_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-13.0.0/clang+llvm-13.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz)
 endif()
-set(CLANG_SOURCES_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.0/clang-12.0.0.src.tar.xz)
+set(CLANG_SOURCES_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-13.0.0/clang-13.0.0.src.tar.xz)
 set(NCURSES_SOURCES_URL https://ftp.gnu.org/pub/gnu/ncurses/ncurses-6.2.tar.gz)
 if(APPLE)
   set(Z3_PREBUILT_URL https://github.com/Z3Prover/z3/releases/download/z3-4.8.7/z3-4.8.7-x64-osx-10.14.6.zip)
@@ -285,8 +275,7 @@ else()
 endif()
 #+END_SRC
 *** Download Libclang, NCurses and Z3
-Now I download and unpack all the dependencies at *build* *time*. The pre-built ~libclang~
-also comes with useful CMake functions which we need to build the static ~libclang~.
+The dependencies are then downloaded and unpacked at *build* *time* ...
 #+BEGIN_SRC cmake :tangle cmake/modules/LinuxMacosBuild.cmake
 include(Download)
 message(STATUS "Downloading ncurses sources, prebuilt z3 & prebuilt libclang with sources; this is ~500MB, please be patient, 'libclang_prebuilt' will take several minutes ...")
@@ -300,8 +289,8 @@ set(LIBCLANG_PREBUILT_DIR)
 download(libclang_prebuilt ${LIBCLANG_PREBUILT_URL} LIBCLANG_PREBUILT_DIR)
 #+END_SRC
 *** Configure NCurses as an external project
-~ncurses~ does not provide prebuilt static archives so it is built in place. The
-build recipe is stolen from Arch scripts.
+Since ~ncurses~ does not provide prebuilt static archives we build it locally
+using a recipe stolen from Arch scripts:
 #+BEGIN_SRC cmake :tangle cmake/modules/LinuxMacosBuild.cmake
 include(ExternalProject)
 ExternalProject_Add(ncurses
@@ -312,10 +301,11 @@ ExternalProject_Add(ncurses
   )
 #+END_SRC
 *** Setup CMake Paths And Includes
-The first two lines are why I used CMake for this project in the first place,
-they contain useful functions and macros that take care of the nitty gritty C++
-compiler and inclusion flags that allow building ~libclang~ from source, without
-them this project would have been impossible.
+This part is why I used CMake for this project in the first place, the LLVM
+project provides CMake scripts that contain useful functions and macros which
+take care of the nitty gritty C++ compiler and inclusion flags that allow
+building ~libclang~ from source, without them this project would have been
+impossible.
 #+BEGIN_SRC cmake :tangle cmake/modules/LinuxMacosBuild.cmake
 list(APPEND CMAKE_MODULE_PATH "${LIBCLANG_PREBUILT_DIR}/lib/cmake/clang")
 list(APPEND CMAKE_MODULE_PATH "${LIBCLANG_PREBUILT_DIR}/lib/cmake/llvm")
@@ -327,7 +317,8 @@ include(AddClang)
 include(GatherArchives)
 #+END_SRC
 *** Build A Static Libclang
-~macOS~ needs to be told to use C++14:
+For some reason ~macOS~ needs to be told to use C++14 and it doesn't hurt to
+include it for Linux as well:
 #+BEGIN_SRC cmake :tangle cmake/modules/LinuxMacosBuild.cmake
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -345,7 +336,7 @@ get_libclang_sources_and_headers(
   LIBCLANG_PREBUILT_LIBS
   )
 #+END_SRC
-
+Now we have to tell the CMake recipe where to find the shared libraries for the ~z3~ and ~ncurses~ dependencies:
 #+BEGIN_SRC cmake :tangle cmake/modules/LinuxMacosBuild.cmake
 include_directories(${LIBCLANG_PREBUILT_DIR}/include)
 
@@ -370,9 +361,9 @@ endif()
 hard work of generating Makefiles to build a ~clang~ and LLVM based library or
 executable. It's used twice, once to generate a static archive and once more for
 a shared library. I'm building it twice because building with both ~SHARED~ and
-~STATIC~ seems to produce objects compiled with ~-fPIC~ so linking the shared
-library fails. I'm probably doing something wrong but I'll get to it later, this
-works for now.
+~STATIC~ in a single call seems to produce objects compiled with ~-fPIC~ so
+building the shared library fails. I'm probably doing something wrong but this
+seems to work for now.
 #+BEGIN_SRC cmake :tangle cmake/modules/LinuxMacosBuild.cmake
 add_clang_library(libclang
   SHARED
@@ -396,8 +387,8 @@ add_clang_library(libclang_static
 set_target_properties(libclang PROPERTIES VERSION 12)
 #+END_SRC
 
-Pretty much copy-pasta'ed from the CMake build scripts that come with ~clang~
-sources probably doesn't do much.
+This bit is pretty much copy-pasta'ed from the CMake build scripts that come
+with ~clang~ sources probably doesn't do much.
 #+BEGIN_SRC cmake :tangle cmake/modules/LinuxMacosBuild.cmake
 if(APPLE)
   set(LIBCLANG_LINK_FLAGS " -Wl,-compatibility_version -Wl,1")
@@ -410,14 +401,26 @@ else()
 endif()
 #+END_SRC
 
-On MacOS ~libtool~ is used to create a bundled static archive that nests all the
-other libraries but on Linux we make a thin archive, a static archive which
-contains only references to other static archives by first gathering all the
-needed archives in one directory and then calling ~ar~ with the ~T~ (for thin)
-argument with those archives. They are copied to a directory because thin
-archives are sensitive to the relative paths of the archives they reference so
-they need to be same relative location as would be in their final install
-location which in this case is in the same directory.
+On MacOS ~libtool~ can reliably nest multiple archives into one by simply
+passing them in as arguments.
+
+Unfortunately Linux is more complicated. Due to limitations of ~ar~ I have to
+make a [[https://en.wikipedia.org/wiki/Ar_(Unix)#Thin_archive][thin archive]], a static archive which doesn't actually contain the other
+archives but references them, by calling ~ar~ with the ~T~ (for thin) argument.
+
+Then I copy all archives I need to bundle into one directory
+~ALL_ARCHIVES_DIRECTORY~ and build the thin archive there because a thin archive
+finds referenced archives by where they were relative to it when it was created.
+At install time the thin archives are the referenced archives are copied the
+same final location so the relative paths are intact and apps can transparently
+link with the thin archive.
+
+The call to ~gather_archives~ populates ~ALL_ARCHIVES_DIRECTORY~ with a
+hard-coded path local to the CMake ~build~ directory, ~ALL_ARCHIVE_NAMES~ with a
+list of the archives basenames (just the filename without parents) so they can
+be passed to ~ar~ and ~ALL_ARCHIVE_PATHS~ with a list of archives /with/ their
+full paths which is used at install time to copy them to the same location. This
+is not good code.
 #+BEGIN_SRC cmake :tangle cmake/modules/LinuxMacosBuild.cmake
 if(APPLE)
   add_custom_target(
@@ -459,10 +462,10 @@ else()
 endif()
 #+END_SRC
 
-All the archives and dependencies have now been built and bundled so now we can
-generate the example app. The values of all the ~MAKEFILE_BLAH_...~ variables
-are spliced into the [[Static Makefile][Static Makefile]] and [[Shared Makefile][Shared Makefile]] in place of
-~@MAKEFILE_BLAH_...@~.
+Now it's time to create the example app, Makefiles are generated using the
+Makefile templates covered in [[Static Makefile][Static Makefile]] and [[Shared Makefile][Shared Makefile]] and they are
+all copied into an overall ~examples~ directory in ~CMAKE_CURRENT_BINARY_DIR~,
+the CMake ~build~ directory.
 
 That ~CMAKE_OSX_SYSROOT~ thing is simply so ~libclang~ headers can find the
 ~time.h~ on macOS. I'm really not sure why it isn't in the standard location.
@@ -487,7 +490,9 @@ file(COPY ${LIBCLANG_EXAMPLES}/clang_visitor.c DESTINATION ${CMAKE_CURRENT_BINAR
 file(COPY ${LIBCLANG_EXAMPLES}/sample.H DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/examples/shared)
 #+END_SRC
 
-Now install everything and we're done!
+Now everything is installed relative to the ~CMAKE_INSTALL_PREFIX~, the
+libraries under ~lib~, ~clang~ headers under ~include/clang-c~ and ~examples~
+under ~share/doc~.
 #+BEGIN_SRC cmake :tangle cmake/modules/LinuxMacosBuild.cmake
 if(APPLE)
   set(LIBCLANG_INSTALL_LIBS
@@ -511,15 +516,24 @@ install(DIRECTORY ${LIBCLANG_PREBUILT_DIR}/include/clang-c DESTINATION include)
 install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/examples DESTINATION share/doc)
 #+END_SRC
 ** Windows
+The Windows build has the same overall idea as [[*Build A Static Libclang][Linux/macOS]] it's just different
+enough that it's easier to start over than share code.
+
+The initial bits are similar, this time the prebuilt LLVM is downloaded from the
+[[https://ziglang.org][Zig project]] and it has all the dependencies built in so nothing more is needed
+except the ~clang~ sources.
 #+BEGIN_SRC cmake :tangle cmake/modules/MSVCBuild.cmake
-set(LIBCLANG_PREBUILT_URL https://ziglang.org/deps/llvm+clang+lld-12.0.0-x86_64-windows-msvc-release-mt.tar.xz)
-set(CLANG_SOURCES_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.0/clang-12.0.0.src.tar.xz)
+set(LIBCLANG_PREBUILT_URL https://ziglang.org/deps/llvm+clang+lld-13.0.0-x86_64-windows-msvc-release-mt.tar.xz)
+set(CLANG_SOURCES_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-13.0.0/clang-13.0.0.src.tar.xz)
 
 include(Download)
 message(STATUS "Downloading prebuilt libclang with sources; this is ~500MB, please be patient, 'libclang_prebuilt' will take several minutes ...")
 download(clang_sources ${CLANG_SOURCES_URL} LIBCLANG_SOURCES_DIR)
 download(libclang_prebuilt ${LIBCLANG_PREBUILT_URL} LIBCLANG_PREBUILT_DIR)
+#+END_SRC
 
+Then I pull the the LLVM CMake scripts into scope just as [[*Setup CMake Paths And Includes][before]]
+#+BEGIN_SRC cmake :tangle cmake/modules/MSVCBuild.cmake
 list(APPEND CMAKE_MODULE_PATH "${LIBCLANG_PREBUILT_DIR}/lib/cmake/clang")
 list(APPEND CMAKE_MODULE_PATH "${LIBCLANG_PREBUILT_DIR}/lib/cmake/llvm")
 list(APPEND CMAKE_MODULE_PATH "${LIBCLANG_SOURCES_DIR}/cmake/modules")
@@ -553,18 +567,25 @@ set_target_properties(libclang PROPERTIES VERSION 12)
 
 This bit is important, without it every object file spews a [[https://docs.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warning-level-1-c4273?view=vs-2019][inconsistent DLL
 linkage warning]]. More importantly for reasons I don't understand, I have to do
-this as opposed to how the LLVM project does it: ~set_target_properties(libclang PROPERTIES DEFINE_SYMBOL _CINDEX_LIB_)~
+this as opposed to how the LLVM project does it: ~set_target_properties(libclang
+PROPERTIES DEFINE_SYMBOL _CINDEX_LIB_)~
 
 #+BEGIN_SRC cmake :tangle cmake/modules/MSVCBuild.cmake
 target_compile_definitions(obj.libclang PUBLIC "_CINDEX_LIB_")
 #+END_SRC
 
-Also on Windows the ~clang_static.lib~ produced by the above process seems
-hell-bent on delegating to ~libclang.dll~ so trying to bundle it with the rest
-of the archives doesn't work. We end up with a 400MB static library that needs
-~libclang.dll~ at runtime. I guess that's a common idiom on Windows but the
-opposite of what I want so I have to bundle with the intermediate static archive
-~obj.libclang.lib~ and that seems to work.
+While the ~clang~ build function provided by LLVM produces a static library
+called ~clang_static.lib~ any app that links against it /also/ requires
+~libclang.dll~ at runtime, so we have just created a 400MB static library that
+doesn't do anything. I guess static libs that also carry a dependency on DLLs is
+a common idiom on Windows but defeats the purpose of this project.
+
+*However* I found an intermediate static archive ~obj.libclang.lib~ that also
+gets generated and does what I want so I pass that to the archive tool instead.
+I'm sure there is a better way but this seems to work for now.
+
+~LIBCLANG_INSTALL_LIBS~ is used at install time to copy the fat archive to the
+right place.
 #+BEGIN_SRC cmake :tangle cmake/modules/MSVCBuild.cmake
 find_program(lib_tool lib)
 if(NOT lib_tool)
@@ -572,23 +593,30 @@ if(NOT lib_tool)
   set(lib_tool "${CXX_COMPILER_DIRECTORY}/lib.exe")
 endif()
 set(AR_COMMAND ${lib_tool} /NOLOGO /OUT:${CMAKE_CURRENT_BINARY_DIR}/clang_static_bundled.lib "${CMAKE_CURRENT_BINARY_DIR}/obj.libclang.dir/Release/obj.libclang.lib" ${LIBCLANG_PREBUILT_LIBS})
-#+END_SRC
 
-#+BEGIN_SRC cmake :tangle cmake/modules/MSVCBuild.cmake
 add_custom_target(libclang_static_bundled ALL
   COMMAND ${AR_COMMAND}
   DEPENDS libclang
   BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/clang_static_bundled.lib
   )
-
 set(LIBCLANG_INSTALL_LIBS ${CMAKE_CURRENT_BINARY_DIR}/clang_static_bundled.lib)
+#+END_SRC
+
+And now for the example demo, I fill out the [[*CMakeLists MSVC][template CMake build recipe]], copy
+the sources and build scripts to an ~examples~ directory in the local ~build~
+directory ...
+#+BEGIN_SRC cmake :tangle cmake/modules/MSVCBuild.cmake
 set(CMAKE_MSVC_LIB_DIR ${CMAKE_INSTALL_PREFIX}/lib)
 set(CMAKE_MSVC_INCLUDE_DIR ${CMAKE_INSTALL_PREFIX}/include)
 configure_file(${LIBCLANG_EXAMPLES}/CMakeLists.MSVC.in ${CMAKE_CURRENT_BINARY_DIR}/examples/static/CMakeLists.txt)
 file(COPY ${LIBCLANG_EXAMPLES}/sample.H DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/examples/static/bin)
 file(COPY ${LIBCLANG_EXAMPLES}/clang_visitor.c DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/examples/static)
 file(COPY ${LIBCLANG_EXAMPLES}/README.txt DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/examples/static)
+#+END_SRC
 
+... and install the library, ~clang~ headers and demos under
+~CMAKE_INSTALL_PREFIX\{lib,include,share}~ respectively
+#+BEGIN_SRC cmake :tangle cmake/modules/MSVCBuild.cmake
 install(PROGRAMS ${LIBCLANG_INSTALL_LIBS} DESTINATION lib)
 install(DIRECTORY ${LIBCLANG_PREBUILT_DIR}/include/clang-c DESTINATION include)
 install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/examples DESTINATION share/doc)
@@ -607,7 +635,8 @@ function (download name url source_dir)
 endfunction()
 #+END_SRC
 *** Libclang sources, headers and static libs (LibClangBuild.cmake)
-These are the LLVM dependencies needed to build ~libclang~, most have been copied wholesale from the ~CMakeLists.txt~ provided with the project.
+These are the ~clang~ source files and headers needed to build ~libclang~, most
+have been copied wholesale from the ~CMakeLists.txt~ provided with the project.
 #+BEGIN_SRC cmake :tangle cmake/modules/LibClangBuild.cmake
 set(LIBCLANG_SOURCE_PATH tools/libclang)
 set(LIBCLANG_INCLUDE_PATH include/clang-c)
@@ -648,9 +677,9 @@ set(LIBCLANG_ADDITIONAL_HEADER_FILES
 set(LIBCLANG_INDEX_H Index.h)
 #+END_SRC
 
-But this list took some experimentation, apparently we need all these libraries
-and in this approximate order for a ~libclang~ app to statically link correctly,
-I have no idea why I just tried stuff until it worked.
+This list of static archives to an ~libclang~ app needs to link against took
+some experimentation, apparently we need all them in this approximate order to
+link successfully, I have no idea why I just tried stuff until it worked.
 #+BEGIN_SRC cmake :tangle cmake/modules/LibClangBuild.cmake
 set(LIBCLANG_LINK_LIBS
   clangAST
@@ -733,6 +762,7 @@ set(LIBCLANG_LINK_LIBS
   LLVMWebAssemblyAsmParser
   LLVMWebAssemblyDesc
   LLVMWebAssemblyDisassembler
+  LLVMWebAssemblyUtils
   LLVMWebAssemblyInfo
   LLVMX86CodeGen
   LLVMX86AsmParser
@@ -823,7 +853,6 @@ set(LIBCLANG_LINK_LIBS
   LLVMCoroutines
   LLVMSupport
   LLVMObjCARCOpts
-  LLVMHelloNew
   )
 #+END_SRC
 *** Add absolute path to sources and headers (LibClangBuild.cmake)

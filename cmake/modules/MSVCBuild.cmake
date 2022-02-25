@@ -1,5 +1,5 @@
-set(LIBCLANG_PREBUILT_URL https://ziglang.org/deps/llvm+clang+lld-12.0.0-x86_64-windows-msvc-release-mt.tar.xz)
-set(CLANG_SOURCES_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.0/clang-12.0.0.src.tar.xz)
+set(LIBCLANG_PREBUILT_URL https://ziglang.org/deps/llvm+clang+lld-13.0.0-x86_64-windows-msvc-release-mt.tar.xz)
+set(CLANG_SOURCES_URL https://github.com/llvm/llvm-project/releases/download/llvmorg-13.0.0/clang-13.0.0.src.tar.xz)
 
 include(Download)
 message(STATUS "Downloading prebuilt libclang with sources; this is ~500MB, please be patient, 'libclang_prebuilt' will take several minutes ...")
@@ -50,8 +50,8 @@ add_custom_target(libclang_static_bundled ALL
   DEPENDS libclang
   BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/clang_static_bundled.lib
   )
-
 set(LIBCLANG_INSTALL_LIBS ${CMAKE_CURRENT_BINARY_DIR}/clang_static_bundled.lib)
+
 set(CMAKE_MSVC_LIB_DIR ${CMAKE_INSTALL_PREFIX}/lib)
 set(CMAKE_MSVC_INCLUDE_DIR ${CMAKE_INSTALL_PREFIX}/include)
 configure_file(${LIBCLANG_EXAMPLES}/CMakeLists.MSVC.in ${CMAKE_CURRENT_BINARY_DIR}/examples/static/CMakeLists.txt)
