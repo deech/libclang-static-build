@@ -3,6 +3,40 @@
 #+OPTIONS: ^:nil ;; let an underscore be an underscore, disable sub-superscripting
 #+OPTIONS: timestamp:nil
 
+* Table Of Contents :TOC_3:
+- [[#introduction][Introduction]]
+- [[#motivation][Motivation]]
+- [[#getting-started][Getting Started]]
+  - [[#linux-and-macos][Linux and macOS]]
+    - [[#building][Building]]
+    - [[#running-the-examples][Running The Examples]]
+  - [[#windows-10][Windows 10]]
+    - [[#building-1][Building]]
+    - [[#running-the-example][Running The Example]]
+- [[#implementation][Implementation]]
+  - [[#preamble][Preamble]]
+  - [[#linux-and-macos-1][Linux and macOS]]
+    - [[#clang-and-ncurses-download-urls][Clang and NCurses Download URLs]]
+    - [[#download-libclang-ncurses-and-z3][Download Libclang, NCurses and Z3]]
+    - [[#configure-ncurses-as-an-external-project][Configure NCurses as an external project]]
+    - [[#setup-cmake-paths-and-includes][Setup CMake Paths And Includes]]
+    - [[#build-a-static-libclang][Build A Static Libclang]]
+  - [[#windows][Windows]]
+  - [[#other-helper-modules][Other Helper Modules]]
+    - [[#build-time-downloads-downloadcmake][Build Time Downloads (Download.cmake)]]
+    - [[#libclang-sources-headers-and-static-libs-libclangbuildcmake][Libclang sources, headers and static libs (LibClangBuild.cmake)]]
+    - [[#add-absolute-path-to-sources-and-headers-libclangbuildcmake][Add absolute path to sources and headers (LibClangBuild.cmake)]]
+    - [[#gather-names-of-static-archives-and-common-directory][Gather Names Of Static Archives And Common Directory]]
+  - [[#examples][Examples]]
+    - [[#static-makefile][Static Makefile]]
+    - [[#shared-makefile][Shared Makefile]]
+    - [[#shared-makefile-macos][Shared Makefile MacOS]]
+    - [[#cmakelists-msvc][CMakeLists MSVC]]
+    - [[#windows-readme][Windows README]]
+    - [[#sample-c-file][Sample C++ File]]
+    - [[#example-visitor][Example Visitor]]
+- [[#issues-with-gcc--10-on-linux][Issues with GCC < 10 on Linux]]
+
 * Introduction
 This package consists of a set of [[https://cmake.org][CMake]] scripts that download and compile
 [[https://clang.llvm.org/docs/Tooling.html][libclang]] into a single static archive containing all LLVM and third party
