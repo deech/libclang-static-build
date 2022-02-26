@@ -88,7 +88,7 @@ add_clang_library(libclang_static
   DEPENDS ncurses
   )
 
-set_target_properties(libclang PROPERTIES VERSION 12)
+set_target_properties(libclang PROPERTIES VERSION 13)
 
 if(APPLE)
   set(LIBCLANG_LINK_FLAGS " -Wl,-compatibility_version -Wl,1")

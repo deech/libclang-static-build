@@ -119,6 +119,7 @@ set(LIBCLANG_LINK_LIBS
   LLVMWebAssemblyDisassembler
   LLVMWebAssemblyUtils
   LLVMWebAssemblyInfo
+  LLVMWebAssemblyUtils
   LLVMX86CodeGen
   LLVMX86AsmParser
   LLVMX86Desc
